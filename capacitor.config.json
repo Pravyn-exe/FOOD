@@ -1,0 +1,7 @@
+{
+  "appId": "com.pravyn.foodlog",
+  "appName": "Food Log",
+  "webDir": "www",
+  "backgroundColor": "#08090D",
+  "android": { "allowMixedContent": false }
+}
