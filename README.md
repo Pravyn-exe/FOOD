@@ -4,7 +4,7 @@ A neon food, water and weight tracker for your phone.
 
 - BMI plan with daily calorie and protein targets (Indian adult BMI cut-offs)
 - Food search with 90+ Tamil Nadu and Indian foods, portions and macros
-- Snap your plate: AI finds each food and logs it (needs your own Claude API key)
+- Snap your plate: AI finds each food and logs it (free Gemini key or paid Claude key)
 - Liquid water bottle, water reminders, food and water streaks that level up
 - A–F daily score, body progress avatar, plate diary, weekly recap story
 - Works offline. Your data stays on your phone.
@@ -28,7 +28,12 @@ To update the app, change `www/index.html` and push. Both jobs run again.
 
 ## AI photo scan and coach
 
-Open ⚙️ **Settings** in the app and paste a Claude API key from https://console.anthropic.com. The key is stored only on that phone and is sent only to Anthropic. Usage is billed to your Anthropic account. Without a key, everything else still works.
+Open ⚙️ **Settings** in the app and pick a provider:
+
+- **Gemini · free** — get a key at https://aistudio.google.com ("Get API key"). Free keys have daily limits, and Google may use free-tier requests to improve its products.
+- **Claude · paid** — key from https://console.anthropic.com, billed per use. Usually better at reading Indian dishes.
+
+Keys are stored only on that phone. Without a key, everything else still works.
 
 ## Backup
 

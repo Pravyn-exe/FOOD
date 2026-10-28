@@ -448,7 +448,7 @@ textarea{resize:vertical;min-height:70px}
         <button class="primary" id="snapAgain" type="button" style="flex:1">Snap another</button>
       </div>
     </div>
-    <p class="note" id="snapOff" hidden>Photo scan needs your own Claude API key. Add it in <button class="ghost" type="button" onclick="openSettings()" style="padding:3px 10px">⚙️ Settings</button>, or use search on the Add tab.</p>
+    <p class="note" id="snapOff" hidden>Photo scan needs a free Gemini key (or a Claude key). Add it in <button class="ghost" type="button" onclick="openSettings()" style="padding:3px 10px">⚙️ Settings</button>, or use search on the Add tab.</p>
     <input type="file" id="photo" accept="image/*" capture="environment" hidden>
   </section>
 
@@ -498,7 +498,7 @@ textarea{resize:vertical;min-height:70px}
       <input id="chatIn" placeholder="Ask your coach…" autocomplete="off">
       <button class="primary" id="chatSend" type="submit">Send</button>
     </form>
-    <p class="note" id="coachOff" hidden>The AI coach needs your own Claude API key. Add it in <button class="ghost" type="button" onclick="openSettings()" style="padding:3px 10px">⚙️ Settings</button>.</p>
+    <p class="note" id="coachOff" hidden>The AI coach needs a free Gemini key (or a Claude key). Add it in <button class="ghost" type="button" onclick="openSettings()" style="padding:3px 10px">⚙️ Settings</button>.</p>
   </section>
 
   <p class="status" id="status">Loading your log…</p>
@@ -560,8 +560,12 @@ textarea{resize:vertical;min-height:70px}
     <div class="spread"><h2 id="setH">Settings</h2><button class="ghost" id="setClose" type="button">Close</button></div>
     <div class="card" style="background:var(--surface2)">
       <h3>AI photo scan and coach</h3>
-      <p class="note">Paste your own Claude API key from console.anthropic.com. It stays only on this phone and is sent only to Anthropic. Each photo scan costs a small amount on your Anthropic account.</p>
-      <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off" spellcheck="false">
+      <div class="seg" id="pvSeg" role="group" aria-label="AI provider" style="grid-template-columns:1fr 1fr">
+        <button type="button" data-pv="gemini">Gemini · free</button>
+        <button type="button" data-pv="claude">Claude · paid</button>
+      </div>
+      <p class="note" id="pvNote"></p>
+      <input id="apiKey" type="password" placeholder="" autocomplete="off" spellcheck="false">
       <div class="row"><button class="primary" id="keySave" type="button">Save key</button><button class="ghost" id="keyDel" type="button">Remove</button><span class="note" id="keyState"></span></div>
     </div>
     <div class="card" style="background:var(--surface2)">
@@ -775,8 +779,12 @@ function onLoaded(){if(!loaded){loaded=true;if(!settings.profile)openSetup(true)
 
 /* ---------- standalone: local storage + optional own Claude API key ---------- */
 const MODEL_FAST="claude-haiku-5-5",MODEL_VISION="claude-sonnet-5-5";
-function getKey(){try{return localStorage.getItem("foodlog-apikey")||""}catch(e){return ""}}
-function setKey(k){try{k?localStorage.setItem("foodlog-apikey",k):localStorage.removeItem("foodlog-apikey")}catch(e){}}
+const GEMINI_MODELS=["gemini-2.5-flash","gemini-flash-latest","gemini-2.0-flash"];
+function ls(k,v){try{if(v===undefined)return localStorage.getItem(k)||"";v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch(e){return ""}}
+function getProvider(){return ls("foodlog-provider")||"gemini"}
+function keyName(pv){return pv==="claude"?"foodlog-apikey":"foodlog-gkey"}
+function getKey(pv){return ls(keyName(pv||getProvider()))}
+function setKey(k,pv){ls(keyName(pv||getProvider()),k)}
 async function toB64(file){
   const url=URL.createObjectURL(file);
   try{const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url});
@@ -784,27 +792,64 @@ async function toB64(file){
     c.getContext("2d").drawImage(img,0,0,c.width,c.height);return c.toDataURL("image/jpeg",.82).split(",")[1]}
   finally{URL.revokeObjectURL(url)}
 }
+function mergeTurns(input){
+  const msgs=typeof input==="string"?[{role:"user",content:input}]:input.map(m=>({role:m.role,content:m.content}));
+  const out=[];msgs.forEach(m=>{const l=out.at(-1);if(l&&l.role===m.role)l.content+="\n\n"+m.content;else out.push({...m})});return out;
+}
+async function callClaude(input,opts,key){
+  const merged=mergeTurns(input);
+  if(opts.images){const b64=await toB64(opts.images);const last=merged.at(-1);last.content=[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},{type:"text",text:last.content}]}
+  let r;
+  try{r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",signal:opts.signal,headers:{"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+    body:JSON.stringify({model:opts.images?MODEL_VISION:MODEL_FAST,max_tokens:1200,messages:merged})})}
+  catch(e){throw {code:navigator.onLine?"upstream_error":"offline",message:String(e)}}
+  if(!r.ok){const code=r.status===401||r.status===403?"bad_key":r.status===429?"rate_limited":r.status===400&&opts.images?"image_rejected":"upstream_error";let m="";try{m=(await r.json()).error.message}catch(e){}throw {code,message:m}}
+  const j=await r.json();return {text:(j.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("").trim(),truncated:j.stop_reason==="max_tokens"};
+}
+let geminiModel=ls("foodlog-gmodel")||GEMINI_MODELS[0];
+async function callGemini(input,opts,key){
+  const merged=mergeTurns(input);
+  const contents=merged.map(m=>({role:m.role==="assistant"?"model":"user",parts:[{text:m.content}]}));
+  if(opts.images){const b64=await toB64(opts.images);contents.at(-1).parts.unshift({inline_data:{mime_type:"image/jpeg",data:b64}})}
+  const order=[geminiModel,...GEMINI_MODELS.filter(m=>m!==geminiModel)];
+  for(const model of order){
+    const gc={maxOutputTokens:2048,temperature:.4};
+    if(opts.json)gc.responseMimeType="application/json";
+    if(model.includes("2.5"))gc.thinkingConfig={thinkingBudget:0};
+    let r;
+    try{r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{method:"POST",signal:opts.signal,
+      headers:{"content-type":"application/json","x-goog-api-key":key},body:JSON.stringify({contents,generationConfig:gc})})}
+    catch(e){throw {code:navigator.onLine?"upstream_error":"offline",message:String(e)}}
+    if(r.status===404){continue}
+    let j={};try{j=await r.json()}catch(e){}
+    const msg=(j.error&&j.error.message)||"";
+    if(!r.ok){
+      if(r.status===400&&/API key|API_KEY/i.test(msg))throw {code:"bad_key",message:msg};
+      if(r.status===400&&/not found|not supported|unknown name/i.test(msg))continue;
+      if(r.status===403)throw {code:"bad_key",message:msg};
+      if(r.status===429)throw {code:"free_limit",message:msg};
+      throw {code:opts.images&&r.status===400?"image_rejected":"upstream_error",message:msg};
+    }
+    if(model!==geminiModel){geminiModel=model;ls("foodlog-gmodel",model)}
+    const c=(j.candidates||[])[0];
+    if(!c){throw {code:"refused",message:(j.promptFeedback&&j.promptFeedback.blockReason)||""}}
+    return {text:((c.content&&c.content.parts)||[]).map(p=>p.text||"").join("").trim(),truncated:c.finishReason==="MAX_TOKENS"};
+  }
+  throw {code:"upstream_error",message:"No Gemini model available for this key"};
+}
 function makeSampler(){
   async function call(input,opts={}){
-    const key=getKey();if(!key)throw {code:"not_granted",message:"No API key"};
-    let msgs=typeof input==="string"?[{role:"user",content:input}]:input.map(m=>({role:m.role,content:m.content}));
-    const merged=[];msgs.forEach(m=>{const l=merged.at(-1);if(l&&l.role===m.role)l.content+="\n\n"+m.content;else merged.push({...m})});
-    if(opts.images){const b64=await toB64(opts.images);const last=merged.at(-1);last.content=[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},{type:"text",text:last.content}]}
-    let r;
-    try{r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",signal:opts.signal,headers:{"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-      body:JSON.stringify({model:opts.images?MODEL_VISION:MODEL_FAST,max_tokens:1200,messages:merged})})}
-    catch(e){throw {code:navigator.onLine?"upstream_error":"offline",message:String(e)}}
-    if(!r.ok){const code=r.status===401||r.status===403?"bad_key":r.status===429?"rate_limited":r.status===400?"image_rejected":"upstream_error";let m="";try{m=(await r.json()).error.message}catch(e){}throw {code,message:m}}
-    const j=await r.json(),text=(j.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("").trim();
-    if(!text)throw {code:"empty_completion"};
-    if(opts.onText)opts.onText({text,delta:text});
-    return {text,truncated:j.stop_reason==="max_tokens"};
+    const pv=getProvider(),key=getKey(pv);if(!key)throw {code:"not_granted",message:"No API key"};
+    const res=pv==="claude"?await callClaude(input,opts,key):await callGemini(input,opts,key);
+    if(!res.text)throw {code:"empty_completion"};
+    if(opts.onText)opts.onText({text:res.text,delta:res.text});
+    return res;
   }
-  call.json=async(input,opts)=>{const {text}=await call(input,opts);let t=text;const f=t.match(/```(?:json)?\s*([\s\S]*?)```/);if(f)t=f[1];
+  call.json=async(input,opts={})=>{const {text}=await call(input,{...opts,json:true});let t=text;const f=t.match(/```(?:json)?\s*([\s\S]*?)```/);if(f)t=f[1];
     const a=t.indexOf("{"),b=t.lastIndexOf("}");try{return JSON.parse(a>=0?t.slice(a,b+1):t)}catch(e){throw {code:"invalid_json",text}}};
   return call;
 }
-function refreshAI(){if(getKey()){sampleFn=makeSampler();imgOK=true}else{sampleFn=null;imgOK=false}applyAI()}
+function refreshAI(){if(getKey(getProvider())){sampleFn=makeSampler();imgOK=true}else{sampleFn=null;imgOK=false}applyAI()}
 async function init(){
   loadLocal();renderAll();refreshAI();
   $("status").textContent="Saved on this phone only · back up from ⚙️ Settings";onLoaded();
@@ -1014,7 +1059,7 @@ const PARSE=`You log food for a person in Tamil Nadu, India who eats mostly Sout
 Reply with only JSON in this shape:
 {"items":[{"name":"Idli","qty":3,"unit":"piece","kcal":120,"p":4.5,"c":24,"f":0.6,"q":"green"}],"note":"one short practical tip"}
 kcal = calories, p = protein g, c = carbs g, f = fat g. q = "green" (healthy choice), "yellow" (fine in moderation) or "red" (limit: fried, sugary, very oily). Count visible oil, ghee and chutneys. If there is no food, return {"items":[],"note":"No food found"}.`;
-function aiErr(e){const c=e&&e.code;if(c==="bad_key")return "Your API key didn't work. Check it in ⚙️ Settings.";if(c==="offline")return "You're offline. Connect to the internet to use AI.";return c==="not_granted"?"AI is turned off for this page.":c==="rate_limited"?"Too many requests right now. Try again in a minute.":c==="image_rejected"?"That photo didn't work. Try a different one.":c==="invalid_json"?"Couldn't read the result. Try again.":"Something went wrong. Try again."}
+function aiErr(e){const c=e&&e.code;if(c==="bad_key")return "Your API key didn't work. Check it in ⚙️ Settings.";if(c==="free_limit")return "Gemini free limit reached for now. Wait a minute and try again (it resets daily too).";if(c==="refused")return "The AI couldn't read that. Try a clearer photo.";if(c==="offline")return "You're offline. Connect to the internet to use AI.";return c==="not_granted"?"AI is turned off for this page.":c==="rate_limited"?"Too many requests right now. Try again in a minute.":c==="image_rejected"?"That photo didn't work. Try a different one.":c==="invalid_json"?"Couldn't read the result. Try again.":"Something went wrong. Try again."}
 function cleanItems(res){return Array.isArray(res&&res.items)?res.items.filter(i=>i&&i.name):[]}
 async function runParse(prompt){
   const out=$("aiOut");out.hidden=false;out.innerHTML=`<p class="thinking">Finding foods and calories</p>`;
@@ -1266,11 +1311,21 @@ $("story").addEventListener("pointercancel",()=>holding=false);
 $("storyBub").onclick=openStory;$("storyBtn").onclick=openStory;
 
 /* ---------- settings ---------- */
-function openSettings(){$("apiKey").value=getKey();$("keyState").textContent=getKey()?"Key saved ✓":"No key yet";$("bkBox").hidden=true;$("settings").hidden=false}
+const PV_INFO={
+  gemini:{ph:"AIza...",pre:"AIza",note:'Free. Get a key in 1 minute at aistudio.google.com → "Get API key". Free keys have daily limits, and Google may use free-tier requests to improve its products. The key stays on this phone.'},
+  claude:{ph:"sk-ant-...",pre:"sk-",note:"Paid per use on your Anthropic account (console.anthropic.com). Better at reading Indian dishes. The key stays on this phone and is sent only to Anthropic."}
+};
+let pvSel=getProvider();
+function syncPv(){const i=PV_INFO[pvSel];$("pvSeg").querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.pv===pvSel));
+  $("pvNote").textContent=i.note;$("apiKey").placeholder=i.ph;$("apiKey").value=getKey(pvSel);
+  $("keyState").textContent=getKey(pvSel)?(getProvider()===pvSel?"In use ✓":"Saved"):"No key yet"}
+$("pvSeg").querySelectorAll("button").forEach(b=>b.onclick=()=>{pvSel=b.dataset.pv;syncPv()});
+function openSettings(){pvSel=getProvider();syncPv();$("bkBox").hidden=true;$("settings").hidden=false}
 $("setBtn").onclick=openSettings;$("setClose").onclick=()=>$("settings").hidden=true;
 $("settings").onclick=e=>{if(e.target.id==="settings")$("settings").hidden=true};
-$("keySave").onclick=()=>{const k=$("apiKey").value.trim();if(!k.startsWith("sk-")){$("keyState").textContent="That doesn't look like a Claude API key.";return}setKey(k);refreshAI();$("keyState").textContent="Key saved ✓";sPop()};
-$("keyDel").onclick=()=>{setKey("");$("apiKey").value="";refreshAI();$("keyState").textContent="Key removed"};
+$("keySave").onclick=()=>{const k=$("apiKey").value.trim();if(!k.startsWith(PV_INFO[pvSel].pre)){$("keyState").textContent=`That doesn't look like a ${pvSel==="claude"?"Claude":"Gemini"} key.`;return}
+  setKey(k,pvSel);ls("foodlog-provider",pvSel);refreshAI();syncPv();sPop();toast(`${pvSel==="claude"?"Claude":"Gemini"} AI is on`)};
+$("keyDel").onclick=()=>{setKey("",pvSel);refreshAI();syncPv()};
 $("setPlan").onclick=()=>{$("settings").hidden=true;openSetup(false)};
 $("bkCopy").onclick=async()=>{const lite={};Object.keys(days).forEach(k=>{const d={...days[k]};delete d.photos;lite[k]=d});
   const txt=JSON.stringify({v:1,app:"food-log",days:lite,settings});
