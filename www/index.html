@@ -323,10 +323,6 @@ textarea{resize:vertical;min-height:70px}
       <button type="button" id="mNext">Next ›</button>
     </div>
 
-    <div class="card" id="planCard">
-      <div class="spread"><h2>Your plan</h2><button class="ghost" id="editPlan" type="button" style="padding:5px 12px">Edit</button></div>
-      <div id="planBody"></div>
-    </div>
 
     <div class="card sumcard">
       <div class="sticker" id="sticker" hidden><b id="stkG">A</b><span>TODAY</span></div>
@@ -384,7 +380,7 @@ textarea{resize:vertical;min-height:70px}
           </div>
         </div>
       </div>
-      <span class="note">Reminders pop up while this page is open, 8 am to 10 pm.</span>
+      <span class="note" id="wNote">Reminders pop up while the app is open, 8 am to 10 pm.</span>
     </div>
 
     <div class="card" id="platesCard" hidden>
@@ -454,6 +450,23 @@ textarea{resize:vertical;min-height:70px}
 
   <!-- PROGRESS -->
   <section id="tab-progress" class="wrap" hidden>
+    <div class="card" id="planCard">
+      <div class="spread"><h2>Your plan</h2><button class="ghost" id="editPlan" type="button" style="padding:5px 12px">Edit</button></div>
+      <div id="planBody"></div>
+    </div>
+    <div class="card" id="breakCard">
+      <div class="spread"><h2>Desk breaks</h2><span class="note num" id="brClock"></span></div>
+      <p class="note">Sitting all day slows weight loss. Stand up, walk and stretch for 2 minutes every break.</p>
+      <div class="row" style="flex-wrap:nowrap"><span class="num" id="brCount" style="font-size:1.4rem;font-weight:700">0</span><span class="note" id="brNext">breaks today</span>
+        <button class="primary" id="brDone" type="button" style="margin-left:auto">✓ Took a break</button></div>
+      <div class="form2">
+        <label class="full">Remind every<select id="brEvery"><option value="0">Off</option><option value="30">30 min</option><option value="45">45 min</option><option value="60">1 hour</option><option value="90">1.5 hours</option></select></label>
+        <label>Work starts<input id="brStart" type="time" value="10:00"></label>
+        <label>Work ends<input id="brEnd" type="time" value="19:00"></label>
+        <div class="full"><span class="label">Work days</span><div class="chips" id="brDays" style="margin-top:6px"></div></div>
+      </div>
+      <span class="note" id="brNote"></span>
+    </div>
     <button class="primary" id="storyBtn" type="button">▶ Watch this week's story</button>
     <div class="card">
       <div class="kpis">
@@ -601,9 +614,11 @@ textarea{resize:vertical;min-height:70px}
   <button data-tab="today" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Today</button>
   <button data-tab="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Add</button>
   <button data-tab="snap" class="shutter" aria-label="Snap food"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></i>Snap</button>
-  <button data-tab="progress"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Progress</button>
+  <button data-tab="progress"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2.5"/><path d="M12 8v6M8 22l4-8 4 8M7 11h10"/></svg>Plan</button>
   <button data-tab="coach"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v11H9l-5 4z"/></svg>Coach</button>
 </div></nav>
+<div class="remind" id="brRemind" role="alert" hidden style="background:var(--orange);box-shadow:0 0 34px rgba(255,122,26,.5)"><span class="ico">🚶</span><div><b id="brT">Break time!</b><span id="brS"></span></div>
+  <div class="acts"><button class="yes" id="brYes" type="button" style="color:var(--orange)">Done</button><button class="no" id="brNo" type="button">Later</button></div></div>
 <div class="remind" id="remind" role="alert" hidden><span class="ico">💧</span><div><b id="remT">Water time!</b><span id="remS"></span></div>
   <div class="acts"><button class="yes" id="remYes" type="button">Drank 1</button><button class="no" id="remNo" type="button">Later</button></div></div>
 <div class="celebrate" id="cele" hidden role="dialog" aria-modal="true" aria-labelledby="ceText">
@@ -650,7 +665,7 @@ const queue={},$=id=>document.getElementById(id);
 function keyOf(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
 function fromKey(k){const [y,m,d]=k.split("-").map(Number);return new Date(y,m-1,d)}
 function shift(k,n){const d=fromKey(k);d.setDate(d.getDate()+n);return keyOf(d)}
-function day(k){const d=days[k]||{};return {items:(d.items||[]).slice(),weight:d.weight??null,water:d.water||0,waterAt:d.waterAt||0,photos:(d.photos||[]).slice()}}
+function day(k){const d=days[k]||{};return {items:(d.items||[]).slice(),weight:d.weight??null,water:d.water||0,waterAt:d.waterAt||0,breaks:d.breaks||0,breakAt:d.breakAt||0,photos:(d.photos||[]).slice()}}
 function tot(k){return day(k).items.reduce((a,i)=>({kcal:a.kcal+(+i.kcal||0),p:a.p+(+i.p||0),c:a.c+(+i.c||0),f:a.f+(+i.f||0)}),{kcal:0,p:0,c:0,f:0})}
 function r1(n){return Math.round(n*10)/10}
 function guessMeal(){const h=new Date().getHours();return h<11?"Breakfast":h<15?"Lunch":h<19?"Snacks":"Dinner"}
@@ -862,7 +877,7 @@ function applyAI(){
 }
 
 /* ---------- tabs ---------- */
-const TITLES={today:"Today",add:"Add food",snap:"Snap",progress:"Progress",coach:"Coach"};
+const TITLES={today:"Today",add:"Add food",snap:"Snap",progress:"My plan",coach:"Coach"};
 function showTab(t){
   Object.keys(TITLES).forEach(x=>$("tab-"+x).hidden=x!==t);
   document.querySelectorAll(".tabbar button").forEach(b=>b.dataset.tab===t?b.setAttribute("aria-current","page"):b.removeAttribute("aria-current"));
@@ -871,7 +886,7 @@ function showTab(t){
 document.querySelectorAll(".tabbar button").forEach(b=>b.onclick=()=>{showTab(b.dataset.tab);if(b.dataset.tab==="snap"&&sampleFn&&imgOK&&$("snapRes").hidden)$("photo").click()});
 
 /* ---------- render ---------- */
-function renderAll(){renderDay();renderStreaks();renderPlan();renderToday();renderSeg();renderRecent();renderProgress();renderBodies();renderDiary();renderStoryBub();if(!motiveShown)nextMotive()}
+function renderAll(){renderDay();renderStreaks();renderPlan();renderToday();renderSeg();renderRecent();renderProgress();renderBodies();renderDiary();if(typeof renderBreaks==='function'&&window.__brReady)renderBreaks();if(native())$('wNote').textContent='Phone notifications 8 am to 10 pm, even when the app is closed.';renderStoryBub();if(!motiveShown)nextMotive()}
 function renderDay(){
   const t=keyOf(new Date()),d=fromKey(viewKey);
   $("dayTitle").textContent=viewKey===t?"Today":viewKey===shift(t,-1)?"Yesterday":d.toLocaleDateString("en-IN",{weekday:"short"});
@@ -1018,7 +1033,7 @@ $("uT").addEventListener("input",()=>{$("uT").dataset.auto="";liveSetup()});
 $("setupForm").addEventListener("submit",e=>{e.preventDefault();const s=readSetup();if(bmiOf(s.target,s.h)<18.5)return;
   const isNew=!settings.profile;settings={...settings,profile:s};saveSettings();
   const t=keyOf(new Date()),d=day(t);if(isNew||!currentWeight()||Math.abs(currentWeight()-s.w)>0.05){d.weight=s.w;setDay(t,d)}
-  $("setup").hidden=true;renderAll();sChime();toast("Plan saved")});
+  $("setup").hidden=true;renderAll();scheduleNative(true);sChime();toast("Plan saved")});
 $("setupClose").onclick=()=>$("setup").hidden=true;
 $("editPlan").onclick=()=>openSetup(false);
 
@@ -1127,7 +1142,7 @@ function context(){
   const items=day(t).items.map(i=>`${i.meal}: ${i.name}${i.qty?` (${r1(i.qty)} ${i.unit||""})`:""} ${i.kcal} kcal, ${Math.round(i.p||0)} g protein`).join("\n")||"nothing logged yet";
   const week=[...Array(7)].map((_,i)=>{const k=shift(t,i-6),g=dayScore(k);return `${k}: ${tot(k).kcal} kcal${g?" grade "+g.g:""}`}).join(", ");
   const prof=pr&&pl?`Profile: ${pr.sex==="f"?"female":"male"}, ${pr.age} y, ${pr.h} cm, now ${r1(pl.w)} kg, BMI ${r1(pl.bmi)}, goal ${pr.target} kg at ${pr.pace} kg/week. Daily target ${pl.target} kcal, protein ${pl.protein} g.`:"Profile not set up yet.";
-  return `${prof}\nToday's log (time now ${new Date().toLocaleTimeString("en-IN",{hour:"numeric",minute:"2-digit"})}):\n${items}\nToday total: ${s.kcal} kcal, protein ${Math.round(s.p)} g, carbs ${Math.round(s.c)} g, fat ${Math.round(s.f)} g. Water ${day(t).water} glasses. Day grade so far: ${sc?sc.g:"none"}.\nFood streak ${calcStreak("log").s} days, water streak ${calcStreak("water").s} days.\nLast 7 days: ${week}`;
+  return `${prof}\nToday's log (time now ${new Date().toLocaleTimeString("en-IN",{hour:"numeric",minute:"2-digit"})}):\n${items}\nToday total: ${s.kcal} kcal, protein ${Math.round(s.p)} g, carbs ${Math.round(s.c)} g, fat ${Math.round(s.f)} g. Water ${day(t).water} glasses. Desk breaks taken: ${day(t).breaks}. Day grade so far: ${sc?sc.g:"none"}.\nFood streak ${calcStreak("log").s} days, water streak ${calcStreak("water").s} days.\nLast 7 days: ${week}`;
 }
 const RULES=`You are a friendly, practical food coach inside a food-logging app for a person in Chennai who is trying to lose weight and says overeating is hard to control. They like short, casual, direct answers.
 Rules: keep replies under 120 words, simple English, suggest real Tamil Nadu home foods and swaps, and always help them reach their daily protein goal. Focus on protein, vegetables, portions and habits. Never suggest crash diets, skipping meals, or eating below 1200 kcal a day. Be kind and never shame. If they describe eating large amounts and feeling unable to stop, or guilt after eating, gently suggest seeing a doctor or dietitian. No markdown headings.`;
@@ -1179,7 +1194,7 @@ function setWater(n){
 $("bottle").onclick=()=>setWater(day(viewKey).water+1);
 $("wPlus").onclick=()=>setWater(day(viewKey).water+1);
 $("wMinus").onclick=()=>setWater(day(viewKey).water-1);
-$("remEvery").addEventListener("change",()=>{settings={...settings,remEvery:+$("remEvery").value};saveSettings();lastNudge=Date.now();toast(+$("remEvery").value?"Water reminders on":"Water reminders off")});
+$("remEvery").addEventListener("change",()=>{settings={...settings,remEvery:+$("remEvery").value};saveSettings();scheduleNative(true);lastNudge=Date.now();toast(+$("remEvery").value?"Water reminders on":"Water reminders off")});
 let lastNudge=Date.now(),snoozeTill=0;const origTitle=document.title;
 function hideRemind(){$("remind").hidden=true;document.title=origTitle}
 function checkRemind(){
@@ -1335,6 +1350,71 @@ $("bkLoad").onclick=()=>{try{const o=JSON.parse($("bkText").value);if(o.app!=="f
   Object.keys(o.days).forEach(k=>{const old=days[k];o.days[k].photos=old&&old.photos||[]});days=o.days;settings=o.settings||{};saveLocal();renderAll();$("settings").hidden=true;sChime();toast("Backup restored")}
   catch(e){toast("That backup text isn't valid.")}};
 
+/* ---------- desk breaks ---------- */
+const DAYN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+function brCfg(){const b=settings.breaks||{};const sit=settings.profile&&settings.profile.act<=1.2;
+  return {every:b.every??(sit?60:0),start:b.start||"10:00",end:b.end||"19:00",days:b.days||[1,2,3,4,5]}}
+function hm(t){const [h,m]=t.split(":").map(Number);return h*60+(m||0)}
+function fmtT(min){const d=new Date();d.setHours(Math.floor(min/60),min%60,0,0);return d.toLocaleTimeString("en-IN",{hour:"numeric",minute:"2-digit"})}
+function inWork(c,now){now=now||new Date();const m=now.getHours()*60+now.getMinutes();return c.every>0&&c.days.includes(now.getDay())&&m>=hm(c.start)&&m<hm(c.end)}
+function renderBreaks(){
+  const c=brCfg(),t=keyOf(new Date()),d=day(t),now=new Date(),m=now.getHours()*60+now.getMinutes();
+  $("brClock").textContent=now.toLocaleTimeString("en-IN",{hour:"numeric",minute:"2-digit"});
+  if(document.activeElement!==$("brEvery"))$("brEvery").value=String(c.every);
+  if(document.activeElement!==$("brStart"))$("brStart").value=c.start;
+  if(document.activeElement!==$("brEnd"))$("brEnd").value=c.end;
+  $("brDays").innerHTML="";[1,2,3,4,5,6,0].forEach(i=>{const b=document.createElement("button");b.type="button";b.className="chip";b.textContent=DAYN[i];
+    const on=c.days.includes(i);b.setAttribute("aria-pressed",on);if(on){b.style.background="var(--lime)";b.style.color="var(--on-accent)";b.style.borderColor="var(--lime)"}
+    b.onclick=()=>{const days=on?c.days.filter(x=>x!==i):[...c.days,i];saveBreaks({days})};$("brDays").appendChild(b)});
+  $("brCount").textContent=d.breaks;
+  let nx="";
+  if(!c.every)nx="breaks today · reminders off";
+  else if(inWork(c)){const last=Math.max(d.breakAt||0,brStart);const due=Math.max(0,Math.round((last+c.every*60000-Date.now())/60000));nx=`breaks today · next in ${due} min`}
+  else if(c.days.includes(now.getDay())&&m<hm(c.start))nx=`breaks today · starts ${fmtT(hm(c.start))}`;
+  else nx="breaks today · off work now";
+  $("brNext").textContent=nx;
+  $("brNote").textContent=native()?"You'll get phone notifications even when the app is closed.":"Reminders pop up while the app is open. Install the APK to get phone notifications.";
+}
+function saveBreaks(patch){settings={...settings,breaks:{...brCfg(),...patch}};saveSettings();renderBreaks();scheduleNative(true)}
+$("brEvery").addEventListener("change",()=>{saveBreaks({every:+$("brEvery").value});brStart=Date.now();toast(+$("brEvery").value?"Break reminders on":"Break reminders off")});
+$("brStart").addEventListener("change",()=>{if($("brStart").value)saveBreaks({start:$("brStart").value})});
+$("brEnd").addEventListener("change",()=>{if($("brEnd").value)saveBreaks({end:$("brEnd").value})});
+let brStart=Date.now(),brSnooze=0;
+function tookBreak(){const t=keyOf(new Date()),d=day(t);d.breaks=(d.breaks||0)+1;d.breakAt=Date.now();setDay(t,d);$("brRemind").hidden=true;renderBreaks();sPop();
+  toast(d.breaks===1?"First break done. Keep moving 🚶":`${d.breaks} breaks today 💪`)}
+$("brDone").onclick=tookBreak;$("brYes").onclick=tookBreak;
+$("brNo").onclick=()=>{brSnooze=Date.now()+10*60000;$("brRemind").hidden=true};
+const BR_LINES=["Stand up and walk to the water bottle","2-minute walk. Your back will thank you","Stretch your arms, neck and legs","Walk while you take a call","Climb one floor of stairs","10 squats right at your desk"];
+function checkBreak(){
+  const c=brCfg(),now=Date.now(),d=day(keyOf(new Date()));
+  if(!inWork(c)||now<brSnooze||!$("brRemind").hidden||!$("remind").hidden)return;
+  if(now-Math.max(d.breakAt||0,brStart)<c.every*60000)return;
+  $("brT").textContent="Break time! 🚶";$("brS").textContent=BR_LINES[Math.floor(Math.random()*BR_LINES.length)]+".";
+  $("brRemind").hidden=false;brStart=now;buzz([60,40,60]);sDrop();
+}
+setInterval(()=>{checkBreak();if(!$("tab-progress").hidden)renderBreaks()},30000);
+
+/* ---------- phone notifications (APK only) ---------- */
+function native(){return !!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform())}
+let LN=null;try{if(native())LN=window.Capacitor.registerPlugin("LocalNotifications")}catch(e){}
+async function scheduleNative(ask){
+  if(!LN)return;
+  try{
+    let perm=await LN.checkPermissions();
+    if(perm.display!=="granted"&&ask)perm=await LN.requestPermissions();
+    const pend=await LN.getPending();if(pend.notifications.length)await LN.cancel({notifications:pend.notifications.map(n=>({id:n.id}))});
+    if(perm.display!=="granted")return;
+    try{await LN.createChannel({id:"reminders",name:"Water and break reminders",importance:4,vibration:true})}catch(e){}
+    const list=[],w=settings.remEvery??90;
+    if(w>0)for(let m=8*60+w;m<22*60;m+=w)list.push({id:1000+list.length,title:"💧 Water time",body:"Drink a glass and tap +1 in Food Log.",channelId:"reminders",schedule:{on:{hour:Math.floor(m/60),minute:m%60},allowWhileIdle:true}});
+    const c=brCfg();
+    if(c.every>0)c.days.forEach(dy=>{for(let m=hm(c.start)+c.every;m<hm(c.end);m+=c.every){const i=list.length;
+      list.push({id:2000+i,title:"🚶 Break time",body:BR_LINES[i%BR_LINES.length]+".",channelId:"reminders",schedule:{on:{weekday:dy+1,hour:Math.floor(m/60),minute:m%60},allowWhileIdle:true}})}});
+    if(list.length)await LN.schedule({notifications:list.slice(0,60)});
+  }catch(e){console.warn("notifications",e)}
+}
+setTimeout(()=>scheduleNative(false),3000);
+
 /* ---------- misc ---------- */
 document.addEventListener("keydown",e=>{
   if(!$("story").hidden){if(e.key==="ArrowRight")nextSlide();else if(e.key==="ArrowLeft")prevSlide();else if(e.key==="Escape")closeStory();return}
@@ -1343,7 +1423,7 @@ $("wForm").addEventListener("submit",e=>{e.preventDefault();const w=+$("wIn").va
 $("prev").onclick=()=>{viewKey=shift(viewKey,-1);renderAll()};
 $("next").onclick=()=>{if(viewKey<keyOf(new Date())){viewKey=shift(viewKey,1);renderAll()}};
 
-renderResults();applyAI();init();
+window.__brReady=true;renderResults();applyAI();init();
 </script>
 </body>
 </html>
