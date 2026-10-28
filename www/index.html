@@ -312,18 +312,6 @@ textarea{resize:vertical;min-height:70px}
 
   <!-- TODAY -->
   <section id="tab-today" class="wrap">
-    <button class="storybub" id="storyBub" type="button" hidden><span class="ring"><i>✦</i></span><div><b>Your week story is ready</b><span class="note" style="display:block">Tap to watch your 7-day recap</span></div></button>
-    <div class="streaks">
-      <button class="streak" id="stLog" type="button"><span class="fl" id="stLogF"></span><div><span class="lvl" id="stLogL"></span><span class="num" id="stLogN" style="display:block">0</span><small>day food streak</small><span class="risk" id="stLogR" hidden>⏳ Log today</span></div></button>
-      <button class="streak" id="stWater" type="button"><span class="fl" id="stWaterF"></span><div><span class="lvl" id="stWaterL"></span><span class="num" id="stWaterN" style="display:block">0</span><small>day water streak</small><span class="risk" id="stWaterR" hidden>⏳ Drink up</span></div></button>
-    </div>
-    <div class="motive" aria-live="polite">
-      <span class="label" id="mLabel">Today's push</span>
-      <div class="mt" id="mText"></div>
-      <button type="button" id="mNext">Next ›</button>
-    </div>
-
-
     <div class="card sumcard">
       <div class="sticker" id="sticker" hidden><b id="stkG">A</b><span>TODAY</span></div>
       <div class="summary">
@@ -346,6 +334,19 @@ textarea{resize:vertical;min-height:70px}
       </div>
       <div class="macros" id="macros"></div>
     </div>
+    <div class="card" id="meals"></div>
+    <button class="storybub" id="storyBub" type="button" hidden><span class="ring"><i>✦</i></span><div><b>Your week story is ready</b><span class="note" style="display:block">Tap to watch your 7-day recap</span></div></button>
+    <div class="streaks">
+      <button class="streak" id="stLog" type="button"><span class="fl" id="stLogF"></span><div><span class="lvl" id="stLogL"></span><span class="num" id="stLogN" style="display:block">0</span><small>day food streak</small><span class="risk" id="stLogR" hidden>⏳ Log today</span></div></button>
+      <button class="streak" id="stWater" type="button"><span class="fl" id="stWaterF"></span><div><span class="lvl" id="stWaterL"></span><span class="num" id="stWaterN" style="display:block">0</span><small>day water streak</small><span class="risk" id="stWaterR" hidden>⏳ Drink up</span></div></button>
+    </div>
+    <div class="motive" aria-live="polite">
+      <span class="label" id="mLabel">Today's push</span>
+      <div class="mt" id="mText"></div>
+      <button type="button" id="mNext">Next ›</button>
+    </div>
+
+
 
     <div class="card">
       <div class="spread"><h2>Water</h2><span class="note">1 glass = 250 ml</span></div>
@@ -388,7 +389,6 @@ textarea{resize:vertical;min-height:70px}
       <div class="plates" id="plates"></div>
     </div>
 
-    <div class="card" id="meals"></div>
   </section>
 
   <!-- ADD -->
@@ -698,7 +698,9 @@ function odo(el,val){
 function quality(kcal,p,c,f,name){
   if(kcal<=25)return "green";
   const pp=p*4/kcal,fp=f*9/kcal,n=(name||"").toLowerCase();
-  if(/soft drink|juice|gulab|mysore pak|payasam|ice cream|fries|samosa|noodles|burger|pizza/.test(n))return "red";
+  if(/soft drink|juice|gulab|mysore pak|payasam|ice cream|fries|samosa|noodles|burger|pizza|bajji|bonda|murukku|mixture|65|ghee roast|kothu/.test(n))return "red";
+  if(/sugar|biscuit|sweet/.test(n))return "yellow";
+  if(/egg|chicken|fish|paneer|soya|whey|yogurt|curd|dal|sundal|sprouts|grilled|tandoori|chana|rajma/.test(n)&&!/fry|butter masala|biryani|65/.test(n))return "green";
   if(fp>.55||(kcal>=450&&fp>.4))return "red";
   if(pp>=.25||(kcal<=120&&fp<.35))return "green";
   return "yellow";
@@ -709,7 +711,7 @@ function dayScore(k){
   if(pl&&!pl.teen){max+=40;const r=s.kcal/pl.target,isToday=k===keyOf(new Date());pts+=(isToday&&r<=1.05)||(r>=.9&&r<=1.05)?40:(r>=.8&&r<=1.15)?30:(r>=.7&&r<=1.3)?18:6;
     max+=25;pts+=25*Math.min(1,s.p/pl.protein)}
   max+=20;pts+=20*Math.min(1,d.water/waterGoal());
-  max+=15;let g=0,y=0,all=0;d.items.forEach(i=>{const q=i.q||quality(i.kcal,i.p,i.c,i.f,i.name);all+=+i.kcal||0;if(q==="green")g+=+i.kcal||0;if(q==="yellow")y+=+i.kcal||0});
+  max+=15;let g=0,y=0,all=0;d.items.forEach(i=>{const q=i.qsrc==='ai'&&i.q?i.q:quality(i.kcal,i.p,i.c,i.f,i.name);all+=+i.kcal||0;if(q==="green")g+=+i.kcal||0;if(q==="yellow")y+=+i.kcal||0});
   pts+=15*(all?Math.min(1,(g+.5*y)/all):0);
   const sc=Math.round(pts/max*100);
   return {sc,g:sc>=85?"A":sc>=70?"B":sc>=55?"C":sc>=40?"D":"F"};
@@ -943,7 +945,7 @@ function renderToday(){
     sec.innerHTML=`<div class="meal-head"><div><h3>${m}</h3><span class="note num">${mk} kcal</span></div><button class="add-to" type="button">+ Add</button></div>`;
     sec.querySelector(".add-to").onclick=()=>{curMeal=m;renderSeg();showTab("add")};
     if(!list.length){const p=document.createElement("div");p.className="empty";p.textContent="Nothing logged yet";sec.appendChild(p)}
-    list.forEach(it=>{const row=document.createElement("div");row.className="item";const q=it.q||quality(it.kcal,it.p,it.c,it.f,it.name);
+    list.forEach(it=>{const row=document.createElement("div");row.className="item";const q=it.qsrc==='ai'&&it.q?it.q:quality(it.kcal,it.p,it.c,it.f,it.name);
       row.innerHTML=`<span class="q ${q}" title="${q}"></span><div class="n"><b></b><small></small></div><span class="num">${Math.round(it.kcal)}</span><button class="x" type="button" aria-label="Remove">×</button>`;
       row.querySelector("b").textContent=it.name;
       row.querySelector("small").textContent=[it.qty?`${r1(it.qty)} ${it.unit||""}`.trim():"",it.time,`P ${Math.round(it.p||0)} · C ${Math.round(it.c||0)} · F ${Math.round(it.f||0)}`].filter(Boolean).join(" · ");
@@ -973,7 +975,7 @@ function renderRecent(){
   for(let i=0;i<14&&seen.size<10;i++){day(shift(t,-i)).items.slice().reverse().forEach(it=>{if(seen.size<10&&!seen.has(it.name))seen.set(it.name,it)})}
   $("recentBox").hidden=!seen.size;$("recent").innerHTML="";
   seen.forEach(it=>{const b=document.createElement("button");b.type="button";b.className="chip";
-    b.innerHTML=`<span class="q ${it.q||quality(it.kcal,it.p,it.c,it.f,it.name)}"></span><span></span><span class="num">${Math.round(it.kcal)}</span>`;
+    b.innerHTML=`<span class="q ${it.qsrc==='ai'&&it.q?it.q:quality(it.kcal,it.p,it.c,it.f,it.name)}"></span><span></span><span class="num">${Math.round(it.kcal)}</span>`;
     b.children[1].textContent=it.name;b.onclick=()=>addItems([{...it}]);$("recent").appendChild(b)});
 }
 function renderProgress(){
@@ -1058,7 +1060,7 @@ $("search").addEventListener("input",renderResults);
 function addItems(arr,silent,photo){
   const k=viewKey,d=day(k),before=d.items.length,now=new Date(),time=k===keyOf(now)?now.toLocaleTimeString("en-IN",{hour:"numeric",minute:"2-digit"}):"";
   arr.forEach(it=>{const kc=Math.round(+it.kcal||0),p=r1(+it.p||0),c=r1(+it.c||0),f=r1(+it.f||0);
-    d.items.push({name:String(it.name).slice(0,80),qty:+it.qty||0,unit:it.unit||"",kcal:kc,p,c,f,q:["green","yellow","red"].includes(it.q)?it.q:quality(kc,p,c,f,it.name),meal:curMeal,time})});
+    d.items.push({name:String(it.name).slice(0,80),qty:+it.qty||0,unit:it.unit||"",kcal:kc,p,c,f,q:it.qsrc==="ai"||(it.qsrc!=="db"&&["green","yellow","red"].includes(it.q)&&it.fromAI)?it.q:quality(kc,p,c,f,it.name),qsrc:it.fromAI||it.qsrc==="ai"?"ai":"db",meal:curMeal,time})});
   if(photo){d.photos.push(photo);if(d.photos.length>8)d.photos=d.photos.slice(-8)}
   setDay(k,d);renderAll();sPop();
   if(before===0&&k===keyOf(new Date())){const s=calcStreak("log").s;setTimeout(()=>celebrate("log",s,s===1?"Streak started!":`${s} days in a row!`,milestone(s,"log")),silent?900:350)}
@@ -1078,7 +1080,7 @@ function aiErr(e){const c=e&&e.code;if(c==="bad_key")return "Your API key didn't
 function cleanItems(res){return Array.isArray(res&&res.items)?res.items.filter(i=>i&&i.name):[]}
 async function runParse(prompt){
   const out=$("aiOut");out.hidden=false;out.innerHTML=`<p class="thinking">Finding foods and calories</p>`;
-  try{const res=await sampleFn.json(prompt,{modelTier:"quick"});aiItems=cleanItems(res);showReview(res&&res.note)}
+  try{const res=await sampleFn.json(prompt,{modelTier:"quick"});aiItems=cleanItems(res).map(i=>({...i,fromAI:true}));showReview(res&&res.note)}
   catch(e){out.innerHTML=`<p class="note">${aiErr(e)}</p>`;if(e&&(e.code==="not_granted"))refreshAI()}
 }
 function showReview(note){
@@ -1118,7 +1120,7 @@ $("photo").addEventListener("change",async e=>{
   const tP=thumb(f);
   try{
     const res=await sampleFn.json(PARSE+"\n\nThe image is a photo of the person's meal.",{images:f});
-    const items=cleanItems(res);$("scanLine").hidden=true;
+    const items=cleanItems(res).map(i=>({...i,fromAI:true}));$("scanLine").hidden=true;
     if(!items.length){$("snapList").innerHTML=`<p class="note">${esc((res&&res.note)||"No food found in that photo. Try again closer, with good light.")}</p>`;$("snapActs").hidden=false;$("snapUndo").hidden=true;return}
     const t=items.reduce((a,i)=>({k:a.k+(+i.kcal||0),p:a.p+(+i.p||0)}),{k:0,p:0});
     const img=await tP,photo=img?{id:String(Date.now()),img,meal:curMeal,kcal:Math.round(t.k),caption:items.map(i=>i.name).join(", ").slice(0,120)}:null;
